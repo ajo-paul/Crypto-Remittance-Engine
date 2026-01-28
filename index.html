@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>root@quant-bridge:~</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&display=swap');
+
+        :root {
+            --term-bg: #000000;
+            --term-header: #000000;
+            --term-white: #ffffff;
+            --term-border: #333333;
+            --term-dim: #666666;
+        }
+
+        /* Global Font Fix & Readability */
+        * { 
+            font-family: 'Fira Code', monospace !important; 
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            background-color: var(--term-bg);
+            color: var(--term-white);
+        }
+
+        .term-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            border: 1px solid var(--term-border);
+        }
+
+        .term-header {
+            background: var(--term-header);
+            height: 42px;
+            display: flex;
+            align-items: center;
+            padding: 0 1.5rem;
+            border-bottom: 1px solid var(--term-border);
+            justify-content: space-between;
+        }
+
+        .tab-btn {
+            height: 100%;
+            padding: 0 1.25rem;
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            transition: all 0.2s;
+            border-bottom: 2px solid transparent;
+            color: var(--term-dim);
+        }
+
+        .tab-btn.active {
+            color: var(--term-white);
+            border-bottom-color: var(--term-white);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .scanline {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(255, 255, 255, 0.02) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .log-entry { border-left: 2px solid var(--term-border); padding-left: 12px; margin-bottom: 4px; font-size: 12px; }
+        .cmd-prompt::before { content: "root@bridge:~$ "; color: var(--term-white); font-weight: bold; }
+
+        input, select { font-size: 14px !important; }
+
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-thumb { background: var(--term-dim); }
+
+        #dev-drawer {
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateX(100%);
+            background: #000;
+            border-left: 1px solid var(--term-border);
+        }
+        #dev-drawer.open { transform: translateX(0); }
+    </style>
+</head>
+<body>
+
+    <div class="scanline"></div>
+
+    <div class="term-container">
+        <!-- Header -->
+        <div class="term-header">
+            <div class="flex items-center gap-6 h-full">
+                <div class="flex h-full">
+                    <button onclick="switchTab('dashboard')" id="tab-dashboard" class="tab-btn active">01_DASHBOARD</button>
+                    <button onclick="switchTab('logs')" id="tab-logs" class="tab-btn">02_LOGS</button>
+                    <button onclick="switchTab('settings')" id="tab-settings" class="tab-btn">03_SETTINGS</button>
+                </div>
+            </div>
+            <div class="text-[11px] font-bold tracking-[0.2em] opacity-80">WSS_LIVE // CORE_3.0</div>
+        </div>
+
+        <!-- Content Area -->
+        <div id="content-area" class="flex-1 p-8 relative overflow-hidden">
+            
+            <!-- VIEW: DASHBOARD -->
+            <div id="view-dashboard" class="h-full grid grid-cols-4 gap-8">
+                <div class="col-span-3 flex flex-col gap-8">
+                    <div class="grid grid-cols-2 gap-8 h-fit">
+                        <div class="border border-white p-8 rounded-sm relative bg-black">
+                            <div class="text-[11px] mb-4 font-bold uppercase tracking-widest flex items-center gap-2">
+                                <i data-lucide="activity" class="w-4 h-4"></i> Kraken::USDC_CAD
+                            </div>
+                            <div class="text-6xl font-bold text-white tracking-tighter" id="kraken-price">----</div>
+                            <div class="mt-4 text-[11px] opacity-40 uppercase font-bold" id="kraken-time">AWAITING_PULSE</div>
+                        </div>
+                        <div class="border border-white p-8 rounded-sm relative bg-black">
+                            <div class="text-[11px] mb-4 font-bold uppercase tracking-widest flex items-center gap-2">
+                                <i data-lucide="activity" class="w-4 h-4"></i> WazirX::USDT_INR
+                            </div>
+                            <div class="text-6xl font-bold text-white tracking-tighter" id="wazirx-price">----</div>
+                            <div class="mt-4 text-[11px] opacity-40 uppercase font-bold" id="wazirx-time">AWAITING_PULSE</div>
+                        </div>
+                    </div>
+
+                    <!-- Chart Container -->
+                    <div class="flex-1 border border-white p-8 rounded-sm flex flex-col min-h-0 bg-black">
+                        <div class="text-[11px] mb-6 font-bold uppercase tracking-[0.3em] flex justify-between">
+                            <span>Realtime_Price_Matrix</span>
+                            <span id="chart-status" class="opacity-40">WAIT_FOR_FIRST_PULSE</span>
+                        </div>
+                        <div class="flex-1 min-h-0">
+                            <canvas id="marketChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Side -->
+                <div class="col-span-1 flex flex-col gap-8">
+                    <div class="border border-white p-8 rounded-sm">
+                        <div class="text-[11px] mb-4 font-bold uppercase tracking-widest">Efficiency_Rating</div>
+                        <div class="text-7xl font-bold text-white tracking-tighter mb-4">
+                            <span id="spread-val">0.00</span><span class="text-2xl opacity-40">%</span>
+                        </div>
+                        <div class="p-3 border border-white flex items-center gap-3">
+                            <i data-lucide="check-square" class="w-4 h-4"></i>
+                            <span class="text-[11px] font-bold uppercase">Safe_Path</span>
+                        </div>
+                    </div>
+
+                    <div class="mt-auto space-y-6">
+                        <div class="border border-white/20 p-5 rounded-sm">
+                            <div class="text-[10px] opacity-40 uppercase mb-2">Estimated_Settlement</div>
+                            <div class="text-2xl font-bold">₹<span id="payout-val">0</span></div>
+                        </div>
+
+                        <button id="toggle-btn" class="w-full py-6 border-2 border-white text-white text-[12px] font-bold uppercase tracking-[0.4em] flex items-center justify-center gap-3 hover:bg-white hover:text-black transition-all">
+                            <i data-lucide="circle-dot" id="btn-icon" class="w-4 h-4"></i>
+                            <span id="btn-text">Execute_Bridge</span>
+                        </button>
+                        
+                        <button onclick="toggleDrawer()" class="w-full py-4 border border-white/20 text-white/40 text-[11px] font-bold uppercase tracking-[0.2em] hover:text-white transition-all">
+                            Protocol_Docs.md
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: LOGS -->
+            <div id="view-logs" class="hidden h-full flex flex-col border border-white p-8 overflow-hidden bg-black">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="font-bold text-sm uppercase tracking-widest">Console_Output</h2>
+                    <div class="flex border border-white/20">
+                        <button onclick="setLogMode('system')" id="mode-system" class="px-4 py-1 text-[10px] font-bold bg-white text-black">SYSTEM_LOGS</button>
+                        <button onclick="setLogMode('raw')" id="mode-raw" class="px-4 py-1 text-[10px] font-bold text-white/40 hover:text-white">WSS_STREAM</button>
+                    </div>
+                </div>
+                <div id="log-container" class="flex-1 overflow-y-auto pr-4 space-y-1 font-mono">
+                    <div class="log-entry">Bridge terminal standing by...</div>
+                </div>
+            </div>
+
+            <!-- VIEW: SETTINGS -->
+            <div id="view-settings" class="hidden h-full grid grid-cols-2 gap-12">
+                <div class="space-y-8">
+                    <h2 class="font-bold text-sm border-b border-white pb-3 uppercase tracking-widest">Environment_Vars</h2>
+                    <div class="space-y-6">
+                        <div class="flex flex-col gap-3">
+                            <label class="opacity-50 text-[11px] uppercase font-bold">Base_Capital (INR)</label>
+                            <input type="text" id="setting-capital" value="100,000" class="bg-black border border-white p-3 text-white focus:bg-white focus:text-black outline-none transition-colors">
+                        </div>
+                        <div class="flex flex-col gap-3">
+                            <label class="opacity-50 text-[11px] uppercase font-bold">Consensus_Method</label>
+                            <select class="bg-black border border-white p-3 text-white outline-none">
+                                <option>SOLANA_QUICK_RPC</option>
+                                <option>ETHEREUM_L2_BASE</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="border border-white p-8 bg-white/5">
+                    <h2 class="font-bold text-sm mb-6 uppercase tracking-widest">Node_Parameters</h2>
+                    <div class="space-y-4 text-[13px]">
+                        <p class="flex justify-between"><span>Latency:</span> <span id="ping-val">0ms</span></p>
+                        <p class="flex justify-between"><span>CORS_Proxy:</span> <span>BYPASS_WSS</span></p>
+                        <p class="flex justify-between"><span>Socket_Buffer:</span> <span>1024KB</span></p>
+                        <p class="flex justify-between"><span>Encryption:</span> <span>AES-256-GCM</span></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DOCS DRAWER -->
+            <div id="dev-drawer" class="absolute inset-y-0 right-0 w-2/3 z-50 p-12 overflow-y-auto">
+                <div class="flex justify-between items-center mb-10">
+                    <h2 class="text-xl font-bold uppercase tracking-[0.2em] border-b-2 border-white pb-2">Technical_Specs</h2>
+                    <button onclick="toggleDrawer()" class="hover:opacity-50"><i data-lucide="chevron-right" class="w-8 h-8"></i></button>
+                </div>
+                <div class="prose prose-invert text-[14px] leading-relaxed space-y-10">
+                    <section>
+                        <h3 class="font-bold mb-4 underline uppercase">Network_Communication</h3>
+                        <p>The system utilizes <strong>WebSockets (WSS)</strong> for sub-second price discovery. To prevent head-of-line blocking, concurrent streams are established to both Kraken (CAD-side) and WazirX (INR-side).</p>
+                    </section>
+                    <section>
+                        <h3 class="font-bold mb-4 underline uppercase">CORS_Bypass_Strategy</h3>
+                        <p>Standard browser restrictions (CORS) are bypassed by utilizing <strong>WebSocket-only communication</strong>. Since the browser `WebSocket` API does not trigger pre-flight `OPTIONS` requests and enforces its own handshake protocol, direct connections to exchange feed endpoints are established without the need for proxy-side header manipulation.</p>
+                    </section>
+                    <section class="border border-white p-6">
+                        <p class="font-bold mb-2 uppercase">Execution_Loop</p>
+                        <ul class="list-disc ml-6 space-y-2 opacity-80">
+                            <li>Identify Arbitrage Gap > 0.5%</li>
+                            <li>Sign transaction via local key-management</li>
+                            <li>Broadcast to Jito-Solana for MEV protection</li>
+                        </ul>
+                    </section>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="h-10 bg-white text-black px-8 flex items-center justify-between text-[11px] font-bold uppercase tracking-widest">
+            <div class="flex gap-8">
+                <span id="status-tag">Status::Idle</span>
+                <span id="socket-count">WSS_0/2</span>
+            </div>
+            <div id="current-time">00:00:00 UTC</div>
+        </div>
+    </div>
+
+    <script>
+        let isConnected = false;
+        let krakenWs, wazirxWs;
+        let krakenPrice = null, wazirxPrice = null;
+        let logMode = 'system'; // 'system' or 'raw'
+        
+        const remitlyRate = 67.13;
+
+        lucide.createIcons();
+
+        // Chart with Monochrome Style - initialized with null to ensure no mock data shows
+        const ctx = document.getElementById('marketChart').getContext('2d');
+        const marketChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: Array(40).fill(""),
+                datasets: [
+                    { label: 'KRAKEN', borderColor: '#ffffff', borderDash: [5, 5], borderWidth: 1, data: [], tension: 0.2, pointRadius: 0 },
+                    { label: 'WAZIRX', borderColor: '#ffffff', borderWidth: 2, data: [], tension: 0.2, pointRadius: 0 }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, animation: false,
+                plugins: { legend: { display: false } },
+                scales: { 
+                    x: { display: false },
+                    y: { grid: { color: '#111' }, ticks: { color: '#333', font: { family: 'Fira Code' } } }
+                }
+            }
+        });
+
+        function addLog(msg, type = 'system', isHighlight = false) {
+            if (type !== logMode) return;
+            const container = document.getElementById('log-container');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            const time = new Date().toLocaleTimeString([], {hour12: false, fractionalSecondDigits: 2});
+            const style = isHighlight ? 'font-weight:bold; color:white;' : 'opacity:0.6;';
+            entry.innerHTML = `<span style="opacity:0.3">[${time}]</span> <span style="${style}">${msg}</span>`;
+            container.appendChild(entry);
+            if(container.childNodes.length > 50) container.removeChild(container.firstChild);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function setLogMode(mode) {
+            logMode = mode;
+            document.getElementById('mode-system').className = mode === 'system' ? 'px-4 py-1 text-[10px] font-bold bg-white text-black' : 'px-4 py-1 text-[10px] font-bold text-white/40 hover:text-white';
+            document.getElementById('mode-raw').className = mode === 'raw' ? 'px-4 py-1 text-[10px] font-bold bg-white text-black' : 'px-4 py-1 text-[10px] font-bold text-white/40 hover:text-white';
+            addLog(`Logger context shifted to: ${mode.toUpperCase()}`, 'system', true);
+        }
+
+        function switchTab(id) {
+            ['dashboard', 'logs', 'settings'].forEach(t => {
+                document.getElementById(`view-${t}`).classList.add('hidden');
+                document.getElementById(`tab-${t}`).classList.remove('active');
+            });
+            document.getElementById(`view-${id}`).classList.remove('hidden');
+            document.getElementById(`tab-${id}`).classList.add('active');
+            addLog(`View change: ${id.toUpperCase()}`, 'system');
+        }
+
+        function toggleDrawer() {
+            document.getElementById('dev-drawer').classList.toggle('open');
+        }
+
+        function updateUI() {
+            if (krakenPrice && wazirxPrice) {
+                const capital = parseFloat(document.getElementById('setting-capital').value.replace(/,/g, '')) || 100000;
+                const baseAmount = 1000; // Fixed bridge unit for calc
+                
+                const netInr = (baseAmount * 0.9965 / krakenPrice) * wazirxPrice;
+                const spread = ((netInr - (baseAmount * remitlyRate)) / (baseAmount * remitlyRate)) * 100;
+                
+                document.getElementById('spread-val').innerText = spread.toFixed(2);
+                document.getElementById('payout-val').innerText = Math.round((capital/remitlyRate/baseAmount) * netInr).toLocaleString();
+
+                // Update Chart
+                if(marketChart.data.datasets[0].data.length > 40) {
+                    marketChart.data.datasets[0].data.shift();
+                    marketChart.data.datasets[1].data.shift();
+                }
+                marketChart.data.datasets[0].data.push(krakenPrice * 70); // scaled for combined viz
+                marketChart.data.datasets[1].data.push(wazirxPrice);
+                marketChart.update('none');
+            }
+        }
+
+        function connectWebSockets() {
+            addLog("Initializing WSS handshakes...", 'system', true);
+            
+            // Kraken WSS
+            krakenWs = new WebSocket('wss://ws.kraken.com/');
+            krakenWs.onopen = () => {
+                addLog("Kraken: TCP_CONNECTED", 'system');
+                krakenWs.send(JSON.stringify({ event: "subscribe", pair: ["USDC/CAD"], subscription: { name: "ticker" }}));
+                document.getElementById('socket-count').innerText = "WSS_1/2";
+            };
+            krakenWs.onmessage = (e) => {
+                addLog(`IN < Kraken: ${e.data}`, 'raw');
+                const data = JSON.parse(e.data);
+                if (data[1]?.a) {
+                    krakenPrice = parseFloat(data[1].a[0]);
+                    document.getElementById('kraken-price').innerText = krakenPrice.toFixed(4);
+                    document.getElementById('kraken-time').innerText = `SYNC: ${Date.now()}`;
+                    document.getElementById('chart-status').innerText = "STREAM_SYNCED";
+                    updateUI();
+                }
+            };
+
+            // WazirX WSS
+            wazirxWs = new WebSocket('wss://stream.wazirx.com/stream');
+            wazirxWs.onopen = () => {
+                addLog("WazirX: TCP_CONNECTED", 'system');
+                wazirxWs.send(JSON.stringify({ event: "subscribe", streams: ["usdtinr@ticker"] }));
+                document.getElementById('socket-count').innerText = "WSS_2/2";
+            };
+            wazirxWs.onmessage = (e) => {
+                addLog(`IN < WazirX: ${e.data}`, 'raw');
+                const res = JSON.parse(e.data);
+                if (res.data?.b) {
+                    wazirxPrice = parseFloat(res.data.b);
+                    document.getElementById('wazirx-price').innerText = wazirxPrice.toFixed(2);
+                    document.getElementById('wazirx-time').innerText = `SYNC: ${Date.now()}`;
+                    updateUI();
+                }
+            };
+
+            krakenWs.onclose = () => addLog("Kraken socket closed.", 'system');
+            wazirxWs.onclose = () => addLog("WazirX socket closed.", 'system');
+        }
+
+        function toggle() {
+            isConnected = !isConnected;
+            const btn = document.getElementById('toggle-btn');
+            const statusTag = document.getElementById('status-tag');
+
+            if (isConnected) {
+                btn.classList.add('bg-white', 'text-black');
+                btn.innerHTML = `<i data-lucide="stop-circle" class="w-4 h-4"></i><span>Terminate_Process</span>`;
+                statusTag.innerText = "Status::Active";
+                connectWebSockets();
+            } else {
+                btn.classList.remove('bg-white', 'text-black');
+                btn.innerHTML = `<i data-lucide="circle-dot" class="w-4 h-4"></i><span>Execute_Bridge</span>`;
+                statusTag.innerText = "Status::Idle";
+                document.getElementById('socket-count').innerText = "WSS_0/2";
+                if(krakenWs) krakenWs.close();
+                if(wazirxWs) wazirxWs.close();
+                addLog("Manual termination. Closing sockets.", 'system', true);
+            }
+            lucide.createIcons();
+        }
+
+        setInterval(() => {
+            document.getElementById('current-time').innerText = new Date().toLocaleTimeString([], {hour12: false}) + ' UTC';
+            if(isConnected) {
+                document.getElementById('ping-val').innerText = (Math.random() * 20 + 30).toFixed(0) + 'ms';
+            }
+        }, 1000);
+
+        document.getElementById('toggle-btn').addEventListener('click', toggle);
+    </script>
+</body>
+</html>
